@@ -1,66 +1,62 @@
-docker-compose up -d
 # Data Pipeline Big Data Open Source (Spark + SQL)
 
 Objectif
 --------
 Construire un pipeline d'ingestion et de traitement à grande échelle sur des fichiers CSV volumineux en utilisant Apache Spark, stockage Postgres, orchestration Airflow et visualisation Metabase.
 
-Contenu du scaffold
--------------------
-- `docker-compose.yml` : services Postgres, Spark (master/worker), Airflow, Metabase (config initiale)
-- `Makefile` : commandes pratiques (up/down/generate/ingest/load)
+Contenu
+-------
+- `docker-compose.yml` : services Postgres, Spark (master/worker), Airflow (standalone), Metabase
+- `airflow/Dockerfile` : image Airflow avec Java + dépendances Python (pyspark, pandas, psycopg2...)
+- `Makefile` : commandes pratiques (up/down/generate/ingest/load/pipeline)
 - `requirements.txt` : libs Python nécessaires pour les scripts locaux
-- `scripts/` : scripts pour générer des CSV, ingérer avec PySpark, charger vers Postgres
-- `airflow/dags/` : DAG d'exemple pour orchestér le pipeline
-- `sql/queries.sql` : exemples de requêtes analytiques (fenêtres, agrégations)
+- `scripts/generate_data.py` : génère des CSV de commandes e-commerce (avec quelques données sales à nettoyer)
+- `scripts/ingest_spark.py` : nettoyage/transformation PySpark, écriture en Parquet partitionné
+- `scripts/load_to_postgres.py` : chargement du Parquet nettoyé dans Postgres (table `orders`)
+- `airflow/dags/pipeline_dag.py` : DAG orchestrant generate -> ingest -> load
+- `sql/queries.sql` : requêtes analytiques (fenêtres, cumuls, classements)
 
 Prérequis
 --------
 - Docker & Docker Compose installés localement
-- (Optionnel) Python 3.10+ pour exécuter les scripts hors Airflow
+- Python 3.10+ pour exécuter `generate`/`load` localement (l'ingestion Spark tourne dans le conteneur `spark-master`)
 
 Démarrage rapide
 ----------------
 1. Lancer les services :
 
 ```bash
-# dans le dossier Data_Pipeline_Big_Data_open_source
-docker-compose up -d
+make up
 ```
 
-2. (Optionnel) Installer les dépendances Python si vous voulez exécuter les scripts localement :
+Cela démarre : Postgres (`localhost:5432`), Spark master UI (`localhost:8080`), Airflow (`localhost:8081`), Metabase (`localhost:3000`).
+
+2. Installer les dépendances Python locales :
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+make venv
 ```
 
-3. Générer des données (exemple) :
+3. Exécuter le pipeline complet (génération -> ingestion Spark -> chargement Postgres) :
 
 ```bash
-make generate
+make pipeline
 ```
 
-4. Ingérer avec Spark et écrire Parquet :
+Ou étape par étape : `make generate`, `make ingest`, `make load`.
 
-```bash
-make ingest
-```
+4. Explorer les données :
+- Requêtes SQL prêtes à l'emploi dans `sql/queries.sql` (via `psql` ou l'éditeur SQL de Metabase).
+- Dans Metabase (`localhost:3000`), connecter une base "PostgreSQL" avec host `postgres`, port `5432`, base `bigdata`, utilisateur/mot de passe `bigdata`.
 
-5. Charger dans Postgres :
-
-```bash
-make load
-```
+5. Orchestration Airflow : le DAG `big_data_pipeline` (visible sur `localhost:8081`) enchaîne les trois mêmes étapes ; identifiants admin générés au premier démarrage visibles dans `docker compose logs airflow`.
 
 Notes
 -----
-- Les images et la configuration Airflow fournis sont minimales pour prototyper en local. Pour une utilisation en production, adaptez les volumes, utilisateurs et variables d'environnement.
-- Voir `airflow/dags/pipeline_dag.py` pour le DAG de démonstration.
+- Configuration minimale pensée pour prototyper en local (Airflow en `SequentialExecutor`/SQLite, un seul worker Spark). Pour la production, adaptez volumes, utilisateurs, secrets et exécuteur Airflow.
+- Les identifiants Postgres par défaut (`bigdata`/`bigdata`) sont à changer en dehors d'un usage local.
 
 Roadmap
 -------
 - Ajouter tests unitaires et intégration
-- Automatiser le build Docker des scripts
 - Ajouter monitoring et alerting dans Airflow
